@@ -53,6 +53,9 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
     totalTransfer = 0;
     ackTransfer = 0;
     transferNumber = 0;
+    
+    std::string gpu_clock = params.find<std::string>("clock", "1GHz");
+    TimeConverter* timecvt = registerClock( gpu_clock, new Clock::Handler<Balar>(this, &Balar::tick ) );
 
     // Link names
     char* link_buffer = (char*) malloc(sizeof(char) * 256);
@@ -66,6 +69,19 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
     // CPU link allocation
     gpu_to_cpu_cache_links = (SimpleMem**) malloc( sizeof(SimpleMem*) * cpu_core_count );
     gpu_to_core_links = (Link**) malloc( sizeof(Link*) * cpu_core_count );
+        
+    SubComponentSlotInfo* gpu_to_cpu_cache = getSubComponentSlotInfo("cpu_cache");
+    if (gpu_to_cpu_cache) {
+        if (!gpu_to_cpu_cache->isAllPopulated())
+            output->fatal(CALL_INFO, -1, "%s, Error: loading 'cpu_cache' subcomponents. All subcomponent slots from 0 to cpu core count must be populated. "
+                    "Check your input config for non-populated slots\n", getName().c_str());
+    
+        uint32_t subCompCount = gpu_to_cpu_cache->getMaxPopulatedSlotNumber() == -1 ? 0 : gpu_to_cpu_cache->getMaxPopulatedSlotNumber() + 1;
+        if (subCompCount != cpu_core_count)
+            output->fatal(CALL_INFO, -1, "%s, Error: loading 'cpu_cache' subcomponents and the number of subcomponents does not match the number of CPU cores. "
+                    "Cores: %" PRIu32 ", SubComps: %" PRIu32 ". Check your input config.\n",
+                    getName().c_str(), cpu_core_count, subCompCount);
+    }
 
     for(uint32_t i = 0; i < cpu_core_count; i++) {
         // Create a unique name for all links
@@ -76,10 +92,14 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
         gpu_to_core_links[i] = configureLink(link_buffer, "1ns", new Event::Handler<Balar>(this, &Balar::cpuHandler));
 
         // Create and initialize CPU memHierarchy links (SimpleMem)
-        gpu_to_cpu_cache_links[i] = dynamic_cast<SimpleMem*>(loadSubComponent("memHierarchy.memInterface", this, params));
-        gpu_to_cpu_cache_links[i]->initialize(link_buffer_mem, new SimpleMem::Handler<Balar>(this, &Balar::memoryHandler));
-        gpu_to_cpu_cache_links[i]->init(0);
-
+        if (gpu_to_cpu_cache) {
+            gpu_to_cpu_cache_links[i] = gpu_to_cpu_cache->create<Interfaces::SimpleMem>(i, ComponentInfo::INSERT_STATS, timecvt, new SimpleMem::Handler<Balar>(this, &Balar::memoryHandler));
+        } else {
+            Params par;
+            par.insert("port", link_buffer_mem);
+            gpu_to_cpu_cache_links[i] = loadAnonymousSubComponent<Interfaces::SimpleMem>("memHierarchy.memInterface", "cpu_cache", i,
+                    ComponentInfo::SHARE_PORTS | ComponentInfo::INSERT_STATS, par, timecvt, new SimpleMem::Handler<Balar>(this, &Balar::memoryHandler));
+        }
     }
 
     gpu_to_cache_links = (SimpleMem**) malloc( sizeof(SimpleMem*) * gpu_core_count );
@@ -87,22 +107,35 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
 
     //// GPU's Cache link allocation
     //// GPU memory Hirerchy
+    SubComponentSlotInfo* gpu_to_cache = getSubComponentSlotInfo("gpu_cache");
+    if (gpu_to_cache) {
+        if (!gpu_to_cache->isAllPopulated())
+            output->fatal(CALL_INFO, -1, "%s, Error: loading 'gpu_cache' subcomponents. All subcomponent slots from 0 to gpu core count must be populated. "
+                    "Check your input config for non-populated slots\n", getName().c_str());
+
+        uint32_t subCompCount = gpu_to_cache->getMaxPopulatedSlotNumber() == -1 ? 0 : gpu_to_cache->getMaxPopulatedSlotNumber() + 1;
+        if (subCompCount != gpu_core_count)
+            output->fatal(CALL_INFO, -1, "%s, Error: loading 'gpu_cache' subcomponents and the number of subcomponents does not match the number of GPU cores. "
+                    "Cores: %" PRIu32 ", SubComps: %" PRIu32 ". Check your input config.\n",
+                    getName().c_str(), gpu_core_count, subCompCount);
+    }
+
+    // Create and initialize GPU memHierarchy links (SimpleMem)
     for(uint32_t i = 0; i < gpu_core_count; i++) {
-
-    	 // Create a unique name for all links
-    	 sprintf(link_cache_buffer, "requestGPUCacheLink%" PRIu32, i);
-
-        // Create and initialize GPU memHierarchy links (SimpleMem)
-        gpu_to_cache_links[i] = dynamic_cast<SimpleMem*>(loadSubComponent("memHierarchy.memInterface", this, params));
-        gpu_to_cache_links[i]->initialize(link_cache_buffer, new SimpleMem::Handler<Balar>(this, &Balar::gpuCacheHandler));
-        gpu_to_cache_links[i]->init(0);
+        if (gpu_to_cache) {
+            gpu_to_cache_links[i] = gpu_to_cache->create<Interfaces::SimpleMem>(i, ComponentInfo::INSERT_STATS, timecvt, new SimpleMem::Handler<Balar>(this, &Balar::gpuCacheHandler));
+        } else {
+    	    // Create a unique name for all links
+    	    sprintf(link_cache_buffer, "requestGPUCacheLink%" PRIu32, i);
+            Params par;
+            par.insert("port", link_cache_buffer);
+            gpu_to_cache_links[i] = loadAnonymousSubComponent<Interfaces::SimpleMem>("memHierarchy.memInterface", "gpu_cache", i,
+                    ComponentInfo::SHARE_PORTS | ComponentInfo::INSERT_STATS, par, timecvt, new SimpleMem::Handler<Balar>(this, &Balar::gpuCacheHandler));
+        }
 
         numPendingCacheTransPerCore[i] = 0;
 
     }
-
-    std::string gpu_clock = params.find<std::string>("clock", "1GHz");
-    registerClock( gpu_clock, new Clock::Handler<Balar>(this, &Balar::tick ) );
 
     my_gpu_component = this;
 }
@@ -110,6 +143,14 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
 Balar::Balar() : Component(-1)
 {
     // for serialization only
+}
+
+void Balar::init(unsigned int phase) {
+    for (uint32_t i = 0; i < cpu_core_count; i++)
+        gpu_to_cpu_cache_links[i]->init(phase);
+
+    for (uint32_t i = 0; i < gpu_core_count; i++)
+        gpu_to_cache_links[i]->init(phase);
 }
 
 bool Balar::tick(SST::Cycle_t x)

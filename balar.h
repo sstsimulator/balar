@@ -53,6 +53,7 @@ namespace BalarComponent {
 class Balar : public SST::Component {
 public:
    Balar( SST::ComponentId_t id, SST::Params& params);
+   void init(unsigned int phase);
    void setup()  {};
    void finish() {};
 
