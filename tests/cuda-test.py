@@ -1,6 +1,10 @@
 import sst
 import sys
-import ConfigParser, argparse
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
+import argparse
 from utils import *
 
 
@@ -35,23 +39,23 @@ if 'ariel' in config.app:
 
    argList = binaryArgs.split(" ")
 
-   print "Num args " + str(len(argList))
-   print "0 " + str(argList[0])
+   print ("Num args " + str(len(argList)))
+   print ("0 " + str(argList[0]))
    if len(argList) == 0:
-      print "No args"
+      print ("No args")
       arielCPU.addParams({
          "executable" : myExec,
          })
    else:
       myArgs = "--" + str(argList[0])
-      print "App args " + str(myArgs)
+      print ("App args " + str(myArgs))
       arielCPU.addParams({
          "executable" : myExec,
          "appargcount" : str(len(argList)),
          "apparg0" : myArgs,
          })
 
-print "Configuring CPU Network-on-Chip..."
+print ("Configuring CPU Network-on-Chip...")
 
 #router = sst.Component("router", "merlin.hr_router")
 #router.addParams(config.getRouterParams())
@@ -73,7 +77,7 @@ gpu.addParams(config.getGPUConfig())
 # Configure CPU mem hirerchy
 # Connect Cores & caches
 for next_core_id in range(config.cpu_cores):
-    print "Configuring CPU core %d..."%next_core_id
+    print ("Configuring CPU core %d..."%next_core_id)
 
     if 'miranda' in config.app:
         cpu = sst.Component("cpu%d"%(next_core_id), "miranda.BaseCPU")
@@ -154,7 +158,7 @@ connect("cpu_gpu_command_link_%d"%next_core_id,
 
 # Configure GPU mem hierarchy
 
-print "Configuring GPU Network-on-Chip..."
+print ("Configuring GPU Network-on-Chip...")
 
 #GPUrouter = sst.Component("GPUrouter", "merlin.hr_router")
 #GPUrouter.addParams(config.getGPURouterParams())
@@ -171,7 +175,7 @@ GPUrouter.addParams({
 
 # Connect Cores & l1caches to the router
 for next_core_id in range(config.gpu_cores):
-    print "Configuring GPU core %d..."%next_core_id
+    print ("Configuring GPU core %d..."%next_core_id)
 
     gpuPort = "requestGPUCacheLink%d"%next_core_id
 
@@ -189,7 +193,7 @@ for next_core_id in range(config.gpu_cores):
             config.default_link_latency)
 
 # Connect GPU L2 caches to the routers
-num_L2s_per_stack = config.gpu_l2_parts / config.hbmStacks
+num_L2s_per_stack = config.gpu_l2_parts // config.hbmStacks
 sub_mems = config.gpu_memory_controllers
 total_mems = config.hbmStacks * sub_mems
 
@@ -199,7 +203,7 @@ cacheStartAddr = 0x00
 memStartAddr = 0x00
 
 if (config.gpu_l2_parts % total_mems) != 0:
-   print "FAIL Number of L2s (%d) must be a multiple of the total number memory controllers (%d)."%(config.gpu_l2_parts, total_mems)
+   print ("FAIL Number of L2s (%d) must be a multiple of the total number memory controllers (%d)."%(config.gpu_l2_parts, total_mems))
    raise SystemExit
 
 for next_group_id in range(config.hbmStacks):
@@ -217,22 +221,22 @@ for next_group_id in range(config.hbmStacks):
 
       if backend == "simple":
          # Create SimpleMem
-         print "Configuring Simple mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "..."
+         print ("Configuring Simple mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "...")
          mem = sst.Component("Simplehbm_" + str(next_mem), "memHierarchy.MemController")
          mem.addParams(config.get_GPU_simple_mem_params(total_mems, memStartAddr, endAddr))
       elif backend == "ddr":
          # Create DDR (Simple)
-         print "Configuring DDR-Simple mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "..."
+         print ("Configuring DDR-Simple mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "...")
          mem = sst.Component("DDR-shbm_" + str(next_mem), "memHierarchy.MemController")
          mem.addParams(config.get_GPU_simple_ddr_params(total_mems, memStartAddr, endAddr, next_mem))
       elif backend == "timing":
          # Create DDR (Timing)
-         print "Configuring DDR-Timing mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "..."
+         print ("Configuring DDR-Timing mem part" + str(next_mem) + " out of " + str(config.hbmStacks) + "...")
          mem = sst.Component("DDR-thbm_" + str(next_mem), "memHierarchy.MemController")
          mem.addParams(config.get_GPU_ddr_timing_params(total_mems, memStartAddr, endAddr, next_mem))
       else :
          # Create CramSim HBM
-         print "Creating HBM controller " + str(next_mem) + " out of " + str(config.hbmStacks) + "..."
+         print ("Creating HBM controller " + str(next_mem) + " out of " + str(config.hbmStacks) + "...")
 
          mem = sst.Component("GPUhbm_" + str(next_mem), "memHierarchy.MemController")
          mem.addParams(config.get_GPU_hbm_memctrl_cramsim_params(total_mems, memStartAddr, endAddr))
@@ -252,8 +256,8 @@ for next_group_id in range(config.hbmStacks):
          linkDimmCtrl = sst.Link("cramsim_dimm_link_" + str(next_mem))
          linkDimmCtrl.connect( (cramsimCtrl, "memLink", "1ns"), (cramsimDimm, "ctrlLink", "1ns") )
 
-      print " - Capacity: " + str(config.gpu_memory_capacity_inB / config.hbmStacks) + " per HBM"
-      print " - Start Address: " + str(hex(memStartAddr)) + " End Address: " + str(hex(endAddr))
+      print (" - Capacity: " + str(config.gpu_memory_capacity_inB // config.hbmStacks) + " per HBM")
+      print (" - Start Address: " + str(hex(memStartAddr)) + " End Address: " + str(hex(endAddr)))
 
       connect("bus_mem_link_%d"%next_mem,
       mem_l2_bus, "low_network_%d"%sub_group_id,
@@ -266,8 +270,8 @@ for next_group_id in range(config.hbmStacks):
       cacheStartAddr = 0 + (256 * next_cache)
       endAddr = cacheStartAddr + config.gpu_memory_capacity_inB - (256 * total_mems)
 
-      print "Creating L2 controller %d-%d (%d)..."%(next_group_id, next_mem_id, next_cache)
-      print " - Start Address: " + str(hex(cacheStartAddr)) + " End Address: " + str(hex(endAddr))
+      print ("Creating L2 controller %d-%d (%d)..."%(next_group_id, next_mem_id, next_cache))
+      print (" - Start Address: " + str(hex(cacheStartAddr)) + " End Address: " + str(hex(endAddr)))
 
       l2g = sst.Component("l2gcache_%d"%(next_cache), "memHierarchy.Cache")
       l2g.addParams(config.getGPUL2Params(cacheStartAddr, endAddr))
@@ -282,7 +286,7 @@ for next_group_id in range(config.hbmStacks):
       mem_l2_bus, "high_network_%d"%(next_mem_id),
       config.default_link_latency).setNoCut()
 
-      print "++ %d-%d (%d)..."%(next_cache, sub_mems, (next_cache + 1) % sub_mems)
+      print ("++ %d-%d (%d)..."%(next_cache, sub_mems, (next_cache + 1) % sub_mems))
       if (next_cache + 1) % sub_mems == 0:
          next_cache = next_cache + total_mems - (sub_mems - 1)
       else:
@@ -296,5 +300,5 @@ sst.setStatisticLoadLevel(statLevel)
 sst.enableAllStatisticsForAllComponents({"type":"sst.AccumulatorStatistic"})
 sst.setStatisticOutput("sst.statOutputTXT", { "filepath" : statFile })
 
-print "Completed configuring the cuda-test model"
+print ("Completed configuring the cuda-test model")
 

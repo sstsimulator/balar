@@ -1,6 +1,9 @@
 import sst
 import os
-import ConfigParser
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
 
 ddr4 = 2666 # Alternative is 2400
 ddr_clock = "1333MHz" if ddr4 == 2666 else "1200MHz"
@@ -62,8 +65,8 @@ class Config:
         self.gpu_cores = cp.getint('GPU', 'gpu_cores')
         self.gpu_l2_parts = cp.getint('GPU', 'gpu_l2_parts')
         self.gpu_l2_capacity = cp.get('GPU', 'gpu_l2_capacity')
-        self.gpu_l2_capacity_per_part_inB = ((int(filter(str.isdigit, self.gpu_l2_capacity))* 1024))
-        self.gpu_l2_capacity_inB = ((int(filter(str.isdigit, self.gpu_l2_capacity))* 1024 * self.gpu_l2_parts))
+        self.gpu_l2_capacity_per_part_inB = ((int(''.join(filter(str.isdigit, self.gpu_l2_capacity)))* 1024))
+        self.gpu_l2_capacity_inB = ((int(''.join(filter(str.isdigit, self.gpu_l2_capacity)))* 1024 * self.gpu_l2_parts))
         self.gpu_cpu_latency = cp.get('GPU', 'gpu_cpu_latency')
 
         self.gpu_memory_clock = cp.get('GPUMemory', 'clock')
@@ -73,9 +76,9 @@ class Config:
         self.hbmChan = cp.getint('GPUMemory', 'hbmChan')
         self.hbmStacks = cp.getint('GPUMemory', 'hbmStacks')
         self.hbmRows = cp.getint('GPUMemory', 'hbmRows')
-        self.gpu_memory_capacity_inB = ((int(filter(str.isdigit, self.gpu_memory_capacity))* 1024 * 1024))
-        self.gpu_memory_capacity_per_part_inB = int(((int(filter(str.isdigit, self.gpu_memory_capacity))* 1024 * 1024)) / self.gpu_l2_parts)
-        self.gpu_memory_capacity_per_stack_inB = int(((int(filter(str.isdigit, self.gpu_memory_capacity))* 1024 * 1024)) / self.hbmStacks)
+        self.gpu_memory_capacity_inB = ((int(''.join(filter(str.isdigit, self.gpu_memory_capacity)))* 1024 * 1024))
+        self.gpu_memory_capacity_per_part_inB = int(((int(''.join(filter(str.isdigit, self.gpu_memory_capacity)))* 1024 * 1024)) / self.gpu_l2_parts)
+        self.gpu_memory_capacity_per_stack_inB = int(((int(''.join(filter(str.isdigit, self.gpu_memory_capacity)))* 1024 * 1024)) / self.hbmStacks)
 
         self.gpu_xbar_clk_freq = cp.get('GPUNetwork', 'frequency')
         self.gpu_xbar_queue_depth = cp.get('GPUNetwork', 'buffer_depth')
@@ -350,7 +353,7 @@ class Config:
             "clock": self.memory_clock,
             "network_bw": self.ring_bandwidth,
             "addr_range_start" : 0,
-            "addr_range_end" : (int(filter(str.isdigit, self.memory_capacity)) * 1024 * 1024),
+            "addr_range_end" : (int(''.join(filter(str.isdigit, self.memory_capacity))) * 1024 * 1024),
             "memNIC.network_link_control" : "shogun.ShogunNIC",
             # Default params
             # "coherence_protocol": coherence_protocol,
