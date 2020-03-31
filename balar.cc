@@ -1,8 +1,8 @@
-// Copyright 2009-2019 NTESS. Under the terms
+// Copyright 2009-2020 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2019, NTESS
+// Copyright (c) 2009-2020, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -53,7 +53,7 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
     totalTransfer = 0;
     ackTransfer = 0;
     transferNumber = 0;
-    
+
     std::string gpu_clock = params.find<std::string>("clock", "1GHz");
     TimeConverter* timecvt = registerClock( gpu_clock, new Clock::Handler<Balar>(this, &Balar::tick ) );
 
@@ -69,13 +69,13 @@ Balar::Balar(SST::ComponentId_t id, SST::Params& params): Component(id)
     // CPU link allocation
     gpu_to_cpu_cache_links = (SimpleMem**) malloc( sizeof(SimpleMem*) * cpu_core_count );
     gpu_to_core_links = (Link**) malloc( sizeof(Link*) * cpu_core_count );
-        
+
     SubComponentSlotInfo* gpu_to_cpu_cache = getSubComponentSlotInfo("cpu_cache");
     if (gpu_to_cpu_cache) {
         if (!gpu_to_cpu_cache->isAllPopulated())
             output->fatal(CALL_INFO, -1, "%s, Error: loading 'cpu_cache' subcomponents. All subcomponent slots from 0 to cpu core count must be populated. "
                     "Check your input config for non-populated slots\n", getName().c_str());
-    
+
         uint32_t subCompCount = gpu_to_cpu_cache->getMaxPopulatedSlotNumber() == -1 ? 0 : gpu_to_cpu_cache->getMaxPopulatedSlotNumber() + 1;
         if (subCompCount != cpu_core_count)
             output->fatal(CALL_INFO, -1, "%s, Error: loading 'cpu_cache' subcomponents and the number of subcomponents does not match the number of CPU cores. "
