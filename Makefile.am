@@ -25,3 +25,6 @@ libbalar_la_LIBADD = \
 	-L$(GPGPUSIM_LIBDIR) \
 	$(GPGPUSIM_LIB)
 
+install-exec-hook:
+	$(SST_REGISTER_TOOL) SST_ELEMENT_SOURCE balar=$(abs_srcdir)
+	$(SST_REGISTER_TOOL) SST_ELEMENT_TESTS  balar=$(abs_srcdir)/tests
