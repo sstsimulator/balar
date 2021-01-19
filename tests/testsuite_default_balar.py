@@ -26,10 +26,6 @@ def initializeTestModule_SingleInstance(class_inst):
 
 ################################################################################
 
-### NOTE NOTE NOTE NOTE - This is boilerplate copy of Cramsim testsuite ranamed
-### to balar, more balar work will be done soon.
-
-
 class testcase_balar(SSTTestCase):
 
     def initializeClass(self, testName):
@@ -46,16 +42,30 @@ class testcase_balar(SSTTestCase):
         super(type(self), self).tearDown()
 
 #####
+    pin_loaded = testing_is_PIN_loaded()
+    pin3_used = testing_is_PIN3_used()
+    missing_cuda_root = os.getenv("CUDA_ROOT") == None
+    missing_cuda_install_path = os.getenv("CUDA_INSTALL_PATH") == None
+    missing_nvcc_path = os.getenv("NVCC_PATH") == None
+    missing_gpgpusim_root = os.getenv("GPGPUSIM_ROOT") == None
+    found_mem_pools_config = sst_core_config_include_file_get_value_str("USE_MEMPOOL", default="", disable_warning=True) != ""
+    found_mpi_config = sst_core_config_include_file_get_value_str("SST_CONFIG_HAVE_MPI", default="", disable_warning=True) != ""
 
-    def test_balar_1_R(self):
-        self.balar_test_template("1_R")
+    @unittest.skipIf(not pin_loaded, "test_balar_runvecadd: Requires PIN, but Env Var 'INTEL_PIN_DIR' is not found or path does not exist.")
+    @unittest.skipIf(pin3_used, "test_balar_runvecadd test: Requires PIN2, but PIN3 is COMPILED.")
+    @unittest.skipIf(missing_cuda_root, "test_balar_runvecadd test: Requires missing environment variable CUDA_ROOT.")
+    @unittest.skipIf(missing_cuda_install_path, "test_balar_runvecadd test: Requires missing environment variable CUDA_INSTALL_PATH.")
+    @unittest.skipIf(missing_nvcc_path, "test_balar_runvecadd test: Requires missing environment variable NVCC_PATH.")
+    @unittest.skipIf(missing_gpgpusim_root, "test_balar_runvecadd test: Requires missing environment variable GPGPUSIM_ROOT.")
+    @unittest.skipIf(found_mem_pools_config, "test_balar_runvecadd test: Found mem-pools configured in core, test requires core to be built using --disable-mem-pools.")
+    @unittest.skipIf(found_mpi_config, "test_balar_runvecadd test: Found mpi configured in core, test requires core to be built using --disable-mpi.")
 
-    def test_balar_1_RW(self):
-        self.balar_test_template("1_RW")
+    def test_balar_runvecadd(self):
+        self.balar_test_template("vectorAdd")
 
-#####
+####
 
-    def balar_test_template(self, testcase):
+    def balar_test_template(self, testcase, testtimeout=60):
 
         # Get the path to the test files
         test_path = self.get_testsuite_dir()
@@ -63,49 +73,54 @@ class testcase_balar(SSTTestCase):
         tmpdir = self.get_test_output_tmp_dir()
 
         self.balarElementDir = os.path.abspath("{0}/../".format(test_path))
-        self.balarElementTestsDir = "{0}/tests".format(self.balarElementDir)
-        self.testbalarDir = "{0}/testbalar".format(tmpdir)
-        self.testbalarTestsDir = "{0}/tests".format(self.testbalarDir)
+        self.balarElementVectorAddTestDir = os.path.abspath("{0}/vectorAdd".format(test_path))
+        self.testbalarDir = "{0}/test_balar".format(tmpdir)
+        self.testbalarVectorAddDir = "{0}/vectorAdd".format(self.testbalarDir)
 
         # Set the various file paths
-        testDataFileName="test_balar_{0}".format(testcase)
+        testDataFileName="test_gpgpu_{0}".format(testcase)
 
         reffile = "{0}/refFiles/{1}.out".format(test_path, testDataFileName)
         outfile = "{0}/{1}.out".format(outdir, testDataFileName)
         errfile = "{0}/{1}.err".format(outdir, testDataFileName)
+        statsfile = "{0}/{1}.stats_out".format(outdir, testDataFileName)
         mpioutfiles = "{0}/{1}.testfile".format(outdir, testDataFileName)
+        sdlfile = "{0}/cuda-test.py".format(test_path, testcase)
 
-        testpyfilepath = "{0}/test_txntrace.py".format(self.testbalarTestsDir)
-        tracefile      = "{0}/sst-balar-trace_verimem_{1}.trc".format(self.testbalarTestsDir, testcase)
-        configfile     = "{0}/ddr4_verimem.cfg".format(self.testbalarDir)
+        log_debug("testcase = {0}".format(testcase))
+        log_debug("sdl file = {0}".format(sdlfile))
+        log_debug("ref file = {0}".format(reffile))
+        log_debug("out file = {0}".format(outfile))
+        log_debug("err file = {0}".format(errfile))
+        log_debug("stats file = {0}".format(statsfile))
+        log_debug("testbalarDir = {0}".format(self.testbalarDir))
 
-        if os.path.isfile(testpyfilepath):
-            sdlfile = testpyfilepath
-            otherargs = '--model-options=\"--configfile={0} traceFile={1}\"'.format(configfile, tracefile)
-        else:
-            sdlfile = "{0}/test_txntrace4.py".format(self.testbalarTestsDir)
-            otherargs = '--model-options=\"--configfile={0} --traceFile={1}\"'.format(configfile, tracefile)
+        arielcfgfile = "{0}/ariel-gpu-v100.cfg".format(self.testbalarDir)
+        otherargs = '--model-options=\"-c {0} -s {1}"'.format(arielcfgfile, statsfile)
 
         # Run SST
-        self.run_sst(sdlfile, outfile, errfile, other_args=otherargs, mpi_out_files=mpioutfiles)
+        self.run_sst(sdlfile, outfile, errfile, set_cwd=self.testbalarDir,
+                     mpi_out_files=mpioutfiles, other_args=otherargs,
+                     timeout_sec=testtimeout)
 
         # NOTE: THE PASS / FAIL EVALUATIONS ARE PORTED FROM THE SQE BAMBOO
         #       BASED testSuite_XXX.sh THESE SHOULD BE RE-EVALUATED BY THE
         #       DEVELOPER AGAINST THE LATEST VERSION OF SST TO SEE IF THE
         #       TESTS & RESULT FILES ARE STILL VALID
 
-        # Perform the test
-        # NOTE: This is how the bamboo tests does it, and its very crude.  The
-        #       testing_compare_diff will always fail, so all it looks for is the
-        #       "Simulation complete" message to decide pass/fail
-        #       This should be improved upon to check for real data...
-        cmp_result = testing_compare_diff(outfile, reffile)
-        if not cmp_result:
-            cmd = 'grep -q "Simulation is complete" {0} '.format(outfile)
-            grep_result = os.system(cmd) == 0
-            self.assertTrue(grep_result, "Output file {0} does not contain a simulation complete message".format(outfile, reffile))
-        else:
-            self.assertTrue(cmp_result, "Output file {0} does not match Reference File {1}".format(outfile, reffile))
+        # Perform the tests
+        self.assertTrue(os_test_file(statsfile, "-e"), "balar test {0} is missing the stats file {1}".format(testDataFileName, statsfile))
+
+        num_stat_lines  = int(os_wc(statsfile, [0]))
+        log_debug("{0} : num_stat_lines = {1}".format(outfile, num_stat_lines))
+        num_ref_lines = int(os_wc(reffile, [0]))
+        log_debug("{0} : num_ref_lines = {1}".format(reffile, num_ref_lines))
+
+        line_count_diff = abs(num_ref_lines - num_stat_lines)
+        log_debug("Line Count diff = {0}".format(line_count_diff))
+
+        if line_count_diff > 15:
+            self.assertFalse(line_count_diff > 15, "Line count between Stats file {0} does not match Reference File {1}; They contain {2} different lines".format(statsfile, reffile, line_count_diff))
 
 #####
 
@@ -118,29 +133,27 @@ class testcase_balar(SSTTestCase):
         tmpdir = self.get_test_output_tmp_dir()
 
         self.balarElementDir = os.path.abspath("{0}/../".format(test_path))
-        self.balarElementTestsDir = "{0}/tests".format(self.balarElementDir)
-        self.testbalarDir = "{0}/testbalar".format(tmpdir)
-        self.testbalarTestsDir = "{0}/tests".format(self.testbalarDir)
+        self.balarElementVectorAddTestDir = os.path.abspath("{0}/vectorAdd".format(test_path))
+        self.testbalarDir = "{0}/test_balar".format(tmpdir)
+        self.testbalarVectorAddDir = "{0}/vectorAdd".format(self.testbalarDir)
 
         # Create a clean version of the testbalar Directory
         if os.path.isdir(self.testbalarDir):
             shutil.rmtree(self.testbalarDir, True)
         os.makedirs(self.testbalarDir)
-        os.makedirs(self.testbalarTestsDir)
+        os.makedirs(self.testbalarVectorAddDir)
 
-        # Create a simlink of the ddr4_verimem.cfg file
-        os_symlink_file(self.balarElementDir, self.testbalarDir, "ddr4_verimem.cfg")
+        # Create a simlink of required test files balar/tests directory
+        os_symlink_file(test_path, self.testbalarDir, "ariel-gpu-v100.cfg")
+        os_symlink_file(test_path, self.testbalarDir, "gpgpusim.config")
+        os_symlink_file(test_path, self.testbalarDir, "utils.py")
 
-        # Create a simlink of each file in the balar/Tests directory
-        for f in os.listdir(self.balarElementTestsDir):
-            os_symlink_file(self.balarElementTestsDir, self.testbalarTestsDir, f)
+        # Create a simlink of each file in the balar/tests/vectorAdd directory
+        for f in os.listdir(self.balarElementVectorAddTestDir):
+            os_symlink_file(self.balarElementVectorAddTestDir, self.testbalarVectorAddDir, f)
 
-        # wget a test file tar.gz
-        testfile = "sst-balar_trace_verimem_trace_files.tar.gz"
-        fileurl = "https://github.com/sstsimulator/sst-downloads/releases/download/TestFiles/{0}".format(testfile)
-        self.assertTrue(os_wget(fileurl, self.testbalarTestsDir), "Failed to download {0}".format(testfile))
-
-        # Extract the test file
-        filename = "{0}/{1}".format(self.testbalarTestsDir, testfile)
-        os_extract_tar(filename, self.testbalarTestsDir)
-
+        # Now build the vectorAdd example
+        cmd = "make"
+        rtn = OSCommand(cmd, set_cwd=self.testbalarVectorAddDir).run()
+        log_debug("Balar vectorAdd Make result = {0}; output =\n{1}".format(rtn.result(), rtn.output()))
+        self.assertTrue(rtn.result() == 0, "vecAdd.cu failed to compile")
